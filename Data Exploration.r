@@ -1,0 +1,7 @@
+colSums(is.na(winequality))
+summary(winequality)
+pairs(winequality, lower.panel = NULL, main="Red Wine Quality Data Scatterplot Matrix")
+library(corrplot)
+corrs <- cor(winequality)
+corrplot(corrs, method = "number", type = "upper")
+title("Red Wine Quality Data Variable Correlation Plot")
