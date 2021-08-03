@@ -1,6 +1,6 @@
 # Red-Wine-Quality-Analysis
 
-This project is analyzing the quality of red wine using different machine learning methods. The data is from the UCI Machine Learning Repository, https://archive.ics.uci.edu/ml/datasets/Wine+Quality. This project examines both regression and classifcation methods to determine which is best for the data. For classification, the wine quality is split into two groups, low and high. Low is when the wine quality rating is less than 7 and high is greater than or equal to 7. 
+This project is analyzing the quality of red wine using different machine learning methods in R. The data is from the UCI Machine Learning Repository, https://archive.ics.uci.edu/ml/datasets/Wine+Quality. This project examines both regression and classifcation methods to determine which is best for the data. For classification, the wine quality is split into two groups, low and high. Low is when the wine quality rating is less than 7 and high is greater than or equal to 7. 
 
 The regression methods used are of the following:
 * Ordinary Least Squares
