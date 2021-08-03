@@ -1,23 +1,35 @@
-# Classification
+# Change quality variable to 1 or 0
+wineTrain$quality <- ifelse(wineTrain$quality >= 7, 1, 0)
 
-# Logistic
+wineTest$quality <- ifelse(wineTest$quality >= 7, 1, 0)
+
+### Logistic
 logModel <- glm(quality ~ ., data = wineTrain, family = "binomial")
 logPred <- predict(logModel, newdata = wineTest, type = "response")
 logPred <- ifelse(logPred >= 0.5, 1, 0)
 table(logPred, wineTest$quality)
 
-# Linear Discriminant Analysis
+# Test error rate
+mean(logPred != wineTest$quality)
+
+### Linear Discriminant Analysis
 library(MASS)
 ldaModel <- lda(quality ~ ., data = wineTrain)
 ldaPred <- predict(ldaModel, newdata = wineTest, type = "response")
 table(ldaPred$class, wineTest$quality)
 
-# Quadratic Discriminant Analysis
+# Test error rate
+mean(ldaPred$class != wineTest$quality)
+
+### Quadratic Discriminant Analysis
 qdaModel <- qda(quality ~ ., data = wineTrain)
 qdaPred <- predict(qdaModel, newdata = wineTest)$class
 table(qdaPred, wineTest$quality)
 
-# Decision Tree 
+# Test error rate
+mean(qdaPred != wineTest$quality) 
+
+### Decision Tree 
 library(tree)
 wineTrain <- winequality[train, ]
 wineTest <- winequality[-train, ]
@@ -26,11 +38,16 @@ wineTest$quality <- factor(ifelse(wineTest$quality >= 7, "High", "Low"))
 wineTrain <- data.frame(wineTrain)
 wineTest <- data.frame(wineTest)
 treeModel <- tree(quality ~ ., data = wineTrain)
+# Plot out the tree
 plot(treeModel)
 text(treeModel, pretty = 0, cex = 0.7)
+
 treePred <- predict(treeModel, wineTest, type = "class")
 table(treePred, wineTest$quality)
-(15+342)/400 = 0.8925 prediction accuracy
+# Test error rate
+mean(treePred != wineTest$quality)
+
+# Use cross-validation to prune the tree
 set.seed(33)
 cvTree <- cv.tree(treeModel, FUN = prune.misclass)
 plot(cvTree$size, cvTree$dev, type = "b")
@@ -41,7 +58,10 @@ prunePred <- predict(pruneTree, wineTest, type = "class")
 
 table(prunePred, wineTest$quality)
 
-# Random Forest
+# Test error rate
+mean(prunePred != wineTest$quality)
+
+### Random Forest
 library(randomForest)
 set.seed(5)
 rfModel <- randomForest(quality ~ ., data = wineTrain, importance = TRUE, ntree = 25)
@@ -50,7 +70,10 @@ wineQuality <- ifelse(wineTest$quality == "High", 1, 0)
 rfQuality <- ifelse(rfPred == "High", 1, 0)
 table(rfQuality, wineQuality)
 
-# K-Nearest Neighbors
+# Test error rate
+(9+26)/400
+
+### K-Nearest Neighbors
 xTrain <- wineTrain[, -12]
 yTrain <- wineTrain[, 12, drop = TRUE]
 xTest <- wineTest[, -12]
@@ -63,8 +86,10 @@ error[i] <- mean(knnPred != yTest)
 }
 23
 plot(error)
+# Test error rate
+mean(knnPred != yTest)
 
-# Support Vector Machine
+### Support Vector Machine
 xTrain <- wineTrain[, -12]
 yTrain <- wineTrain[, 12, drop = TRUE]
 xTest <- wineTest[, -12]
@@ -77,3 +102,6 @@ error[i] <- mean(knnPred != yTest)
 }
 
 plot(error)
+
+# Test error rate
+(1+31)/400
