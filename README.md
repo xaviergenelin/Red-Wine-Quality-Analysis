@@ -59,8 +59,10 @@ The classifcation methods used are of the following:
 
 ### Regression
 The regression models looked at the Mean-Squared Error to test the perofmance of the models. The following table shows the test MSE for each of the models that were considered:
+
 ![](regressionResults.png)
 
 ### Classification
 The classification models looked at accuracy to test the performance of the models. The following tables has the accuracy of each of the models that were condiered:
+
 ![](classificationResults.png)
