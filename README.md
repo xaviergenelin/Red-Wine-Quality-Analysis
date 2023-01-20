@@ -20,3 +20,12 @@ The classifcation methods used are of the following:
 * Decision Trees
 * Random Forests
 * Support Vector Machines
+
+
+## Results
+
+### Regression
+![](regressionResults.png)
+
+### Classification
+![](classificationResults.png)
