@@ -1,0 +1,425 @@
+
+
+```{r setup, include=FALSE}
+library(readr)
+winequality <- read_delim("winequality-red.csv", ";", escape_double = FALSE, trim_ws = TRUE)
+
+library(janitor)
+winequality <- clean_names(winequality)
+
+names(winequality)[names(winequality) == "p_h"] <- "pH"
+```
+
+## Data Exploration
+
+```{r}
+colSums(is.na(winequality))
+```
+
+```{r}
+summary(winequality)
+```
+
+```{r}
+pairs(winequality, lower.panel = NULL, main="Red Wine Quality Data Scatterplot Matrix")
+```
+
+```{r}
+library(corrplot)
+corrs <- cor(winequality)
+corrplot(corrs, method = "number", type = "upper")
+title("Red Wine Quality Data Variable Correlation Plot")
+```
+
+## Data Split
+
+```{r}
+set.seed(55)
+train <- sample(nrow(winequality), floor(nrow(winequality) * 0.75))
+wineTrain <- winequality[train,]
+wineTest <- winequality[-train,]
+```
+
+## Regression Models
+
+### OLS
+```{r}
+ols <- glm(quality~., data=wineTrain)
+summary(ols)
+olsPred <- predict(ols, newdata=wineTest)
+# Test MSE
+olsMSE <- mean((wineTest$quality-olsPred)^2)
+plot(ols)
+```
+
+### Interaction
+```{r}
+interactions <- lm(quality~.^2, data=wineTrain)
+summary(interactions)
+plot(interactions)
+
+interactPred <- predict(interactions, newdata=wineTest)
+# Test MSE
+interactMSE <- mean((wineTest$quality-interactPred)^2)
+```
+
+### Polynomials
+```{r}
+# quadratic
+quad <- lm(quality~.+I(fixed_acidity^2)+I(volatile_acidity^2)+I(citric_acid^2)+I(residual_sugar^2)+I(chlorides^2)+I(free_sulfur_dioxide^2)+I(total_sulfur_dioxide^2)+I(density^2)+I(pH^2)+I(sulphates^2)+I(alcohol^2), data=wineTrain)
+summary(quad)
+
+# cubic
+cubic <- lm(quality~.+I(sulphates^2)+I(sulphates^3), data=wineTrain)
+summary(cubic)
+
+# quartic
+quar <- lm(quality~.+I(sulphates^2)+I(sulphates^3)+I(sulphates^4), data=wineTrain)
+summary(quar)
+
+# predictions
+quadPred <- predict(quad, newdata = wineTest)
+cubicPred <- predict(cubic, newdata=wineTest)
+quarPred <- predict(quar, newdata=wineTest)
+
+# Test MSEs
+quadMSE <- mean((wineTest$quality-quadPred)^2)
+cubicMSE <- mean((wineTest$quality-cubicPred)^2)
+quarMSE <- mean((wineTest$quality-quarPred)^2)
+```
+
+### Lasso
+```{r}
+library(glmnet)
+grid<-10^seq(10,-2,length=100)
+
+xTrain <- model.matrix(quality ~ ., data = wineTrain)[, -1]
+yTrain <- wineTrain$quality
+
+lasso <- glmnet(xTrain, yTrain, alpha = 1, lambda = grid) 
+
+set.seed(13)
+cvLasso <- cv.glmnet(xTrain, yTrain, alpha = 1, nfolds = 11)
+
+bestLambda <- cvLasso$lambda.min
+
+bestLambda
+
+xTest <- model.matrix(quality ~ ., data = wineTest)[, -1]
+lassoPred <- predict(lasso, s = bestLambda, newx = xTest)
+
+# Test MSE
+lassoMSE <- mean((lassoPred - wineTest$quality)^2)
+
+lassoCoef <- predict(lasso, type = "coefficients", s = bestLambda)
+lassoCoef
+```
+
+### Ridge
+```{r}
+grid <- 10^seq(10, -2, length = 100)
+
+xTrain <- model.matrix(quality ~ ., data = wineTrain)[, -1]
+yTrain <- wineTrain$quality
+
+ridge <- glmnet(xTrain, yTrain, alpha = 0, lambda = grid)
+
+set.seed(13)
+
+cvRidge <- cv.glmnet(xTrain, yTrain, alpha = 0, nfolds = 11)
+
+bestLambda <- cvRidge$lambda.min
+bestLambda
+
+ridgePred <- predict(ridge, s = bestLambda, newx = model.matrix(quality ~ ., data = wineTest)[, -1])
+
+yTest <- wineTest$quality
+
+# Test MSE
+ridgeMSE <- mean((yTest - ridgePred)^2)
+```
+
+### Decision Tree
+```{r}
+library(tree)
+wine.tree <- tree(quality~., data=wineTrain)
+summary(wine.tree)
+plot(wine.tree)
+text(wine.tree, pretty=0)
+pred_tree <- predict(wine.tree, newdata=wineTest)
+# Test MSE, no pruning
+treeMSE <- mean((pred_tree - wineTest$quality)^2)
+
+set.seed(21)
+winetree.cv <- cv.tree(wine.tree)
+winetree.cv
+plot(winetree.cv$size, winetree.cv$dev, type="b", main="Regression Tree Cross Validation Error")
+wine.prune9 <- prune.tree(wine.tree, best=9)
+plot(wine.prune9)
+text(wine.prune9, pretty=0)
+pred_prune9 <- predict(wine.prune9, newdata=wineTest)
+
+# Test MSE
+prune9MSE <- mean((pred_prune9 - wineTest$quality)^2)
+
+
+wine.prune6 <- prune.tree(wine.tree, best=6)
+plot(wine.prune6)
+text(wine.prune6, pretty=0)
+pred_prune6 <- predict(wine.prune6, newdata=wineTest)
+# Test MSE
+prune6MSE <- mean((pred_prune6-wineTest$quality)^2)
+```
+ 
+### General Additive Models
+```{r}
+library(splines)
+library(gam)
+gamTwoDF <- lm(quality~ns(fixed_acidity,2)+ns(volatile_acidity,2)+ns(citric_acid,2)+ns(residual_sugar,2)+ns(chlorides,2)+ns(free_sulfur_dioxide,2)+ns(total_sulfur_dioxide,2)+ns(density,2)+ns(pH,2)+ns(sulphates,2)+ns(alcohol,2), data=wineTrain)
+gamDF2Pred <- predict(gamTwoDF, newdata=wineTest)
+# Test MSE
+gam2MSE <- mean((wineTest$quality-gamDF2Pred)^2)
+
+gamThreeDF <- lm(quality~ns(fixed_acidity,3)+ns(volatile_acidity,3)+ns(citric_acid,3)+ns(residual_sugar,3)+ns(chlorides,3)+ns(free_sulfur_dioxide,3)+ns(total_sulfur_dioxide,3)+ns(density,3)+ns(pH,3)+ns(sulphates,3)+ns(alcohol,3), data=wineTrain)
+gamDF3Pred <- predict(gamThreeDF, newdata=wineTest)
+# Test MSE
+gam3MSE <- mean((wineTest$quality-gamDF3Pred)^2)
+
+gamFourDF <- lm(quality~ns(fixed_acidity,4)+ns(volatile_acidity,4)+ns(citric_acid,4)+ns(residual_sugar,4)+ns(chlorides,4)+ns(free_sulfur_dioxide,4)+ns(total_sulfur_dioxide,4)+ns(density,4)+ns(pH,4)+ns(sulphates,4)+ns(alcohol,4), data=wineTrain)
+gamDF4Pred <- predict(gamFourDF, newdata=wineTest)
+# Test MSE
+gam4MSE <- mean((wineTest$quality-gamDF4Pred)^2)
+
+gamFiveDF <- lm(quality~ns(fixed_acidity,5)+ns(volatile_acidity,5)+ns(citric_acid,5)+ns(residual_sugar,5)+ns(chlorides,5)+ns(free_sulfur_dioxide,5)+ns(total_sulfur_dioxide,5)+ns(density,5)+ns(pH,5)+ns(sulphates,5)+ns(alcohol,5), data=wineTrain)
+gamDF5Pred <- predict(gamFiveDF, newdata=wineTest)
+# Test MSE
+gam5MSE <- mean((wineTest$quality-gamDF5Pred)^2)
+
+gamTwoDFSmooth <- gam(quality~s(fixed_acidity,2)+s(volatile_acidity,2)+s(citric_acid,2)+s(residual_sugar,2)+s(chlorides,2)+s(free_sulfur_dioxide,2)+s(total_sulfur_dioxide,2)+s(density,2)+s(pH,2)+s(sulphates,2)+s(alcohol,2), data=wineTrain)
+gamDF2PredSmooth <- predict(gamTwoDFSmooth, newdata=wineTest)
+# Test MSE
+gamSmooth2MSE <- mean((wineTest$quality-gamDF2PredSmooth)^2)
+
+gamThreeDFSmooth <- gam(quality~s(fixed_acidity,3)+s(volatile_acidity,3)+s(citric_acid,3)+s(residual_sugar,3)+s(chlorides,3)+s(free_sulfur_dioxide,3)+s(total_sulfur_dioxide,3)+s(density,3)+s(pH,3)+s(sulphates,3)+s(alcohol,3), data=wineTrain)
+gamDF3PredSmooth <- predict(gamThreeDFSmooth, newdata=wineTest)
+# Test MSE
+gamSmooth3MSE <- mean((wineTest$quality-gamDF3PredSmooth)^2)
+
+gamFourDFSmooth <- gam(quality~s(fixed_acidity,4)+s(volatile_acidity,4)+s(citric_acid,4)+s(residual_sugar,4)+s(chlorides,4)+s(free_sulfur_dioxide,4)+s(total_sulfur_dioxide,4)+s(density,4)+s(pH,4)+s(sulphates,4)+s(alcohol,4), data=wineTrain)
+gamDF4PredSmooth <- predict(gamFourDFSmooth, newdata=wineTest)
+# Test MSE
+gamSmooth4MSE <- mean((wineTest$quality-gamDF4PredSmooth)^2)
+
+gamFiveDFSmooth <- gam(quality~s(fixed_acidity,5)+s(volatile_acidity,5)+s(citric_acid,5)+s(residual_sugar,5)+s(chlorides,5)+s(free_sulfur_dioxide,5)+s(total_sulfur_dioxide,5)+s(density,5)+s(pH,5)+s(sulphates,5)+s(alcohol,5), data=wineTrain)
+gamDF5PredSmooth <- predict(gamFiveDFSmooth, newdata=wineTest)
+# Test MSE
+gamSmooth5MSE <- mean((wineTest$quality-gamDF5PredSmooth)^2)
+```
+
+## Model Selection
+
+### Forward Selection
+```{r}
+library(leaps)
+forward <- regsubsets(quality~., data=wineTrain, nvmax=11, method="forward")
+summary(forward)
+forwardTest <- model.matrix(quality~., data=wineTest, nvmax=11)
+forwardTestMSE <- rep(NA,11)
+for(i in 1:11){
+  forwardCoef <- coef(forward, id=i)
+  forwardPred <- forwardTest[,names(forwardCoef)] %*% forwardCoef
+  forwardTestMSE[i] <- mean((wineTest$quality - forwardPred)^2)
+}
+forwardMin <- which.min(forwardTestMSE)
+forwardMSE <- forwardTestMSE[forwardMin]
+coef(forward, id=forwardMin)
+```
+
+### Backward Selection
+```{r}
+library(leaps)
+backward <- regsubsets(quality~., data=wineTrain, nvmax=11, method="forward")
+summary(backward)
+backwardTest <- model.matrix(quality~., data=wineTest, nvmax=11)
+backwardTestMSE <- rep(NA,11)
+for(i in 1:11){
+  backwardCoef <- coef(backward, id=i)
+  backwardPred <- backwardTest[,names(backwardCoef)] %*% backwardCoef
+  backwardTestMSE[i] <- mean((wineTest$quality - backwardPred)^2)
+}
+backwardMin <- which.min(backwardTestMSE)
+backwardMSE <- backwardTestMSE[backwardMin]
+coef(backward, id=backwardMin)
+```
+
+### Best Subset Selection
+```{r}
+library(leaps)
+bestSub <- regsubsets(quality~., data=wineTrain, nvmax=11)
+summary(bestSub)
+bestSubTest <- model.matrix(quality~., data=wineTest, nvmax=11)
+bestSubTestMSE <- rep(NA,11)
+for(i in 1:11){
+  bestSubCoef <- coef(bestSub, id=i)
+  bestSubPred <- bestSubTest[,names(bestSubCoef)] %*% bestSubCoef
+  bestSubTestMSE[i] <- mean((wineTest$quality - bestSubPred)^2)
+}
+bestSubMin <- which.min(bestSubTestMSE)
+bestSubMSE <- bestSubTestMSE[bestSubMin]
+coef(bestSub, id=7)
+```
+
+
+## Classification
+
+```{r}
+# Change quality variable to 1 or 0
+wineTrain$quality <- ifelse(wineTrain$quality >= 7, 1, 0)
+
+wineTest$quality <- ifelse(wineTest$quality >= 7, 1, 0)
+```
+
+### Logistic
+```{r}
+logModel <- glm(quality ~ ., data = wineTrain, family = "binomial")
+logPred <- predict(logModel, newdata = wineTest, type = "response")
+logPred <- ifelse(logPred >= 0.5, 1, 0)
+logResults <- table(logPred, wineTest$quality)
+
+# Test accuracy
+logAcc <- (logResults[1,1] + logResults[2,2])/length(wineTest$quality)
+```
+
+### Linear Discriminant Analysis
+```{r}
+library(MASS)
+ldaModel <- lda(quality ~ ., data = wineTrain)
+ldaPred <- predict(ldaModel, newdata = wineTest, type = "response")
+table(ldaPred$class, wineTest$quality)
+
+# Test accuracy
+ldaAcc <- mean(ldaPred$class == wineTest$quality)
+```
+
+### Quadratic Discriminant Analysis
+```{r}
+qdaModel <- qda(quality ~ ., data = wineTrain)
+qdaPred <- predict(qdaModel, newdata = wineTest)$class
+table(qdaPred, wineTest$quality)
+
+# Test accuracy
+qdaAcc <- mean(qdaPred == wineTest$quality) 
+```
+
+### Decision Tree 
+```{r}
+library(tree)
+wineTrain <- winequality[train, ]
+wineTest <- winequality[-train, ]
+wineTrain$quality <- factor(ifelse(wineTrain$quality >= 7, "High", "Low"))
+wineTest$quality <- factor(ifelse(wineTest$quality >= 7, "High", "Low"))
+wineTrain <- data.frame(wineTrain)
+wineTest <- data.frame(wineTest)
+treeModel <- tree(quality ~ ., data = wineTrain)
+# Plot out the tree
+plot(treeModel)
+text(treeModel, pretty = 0, cex = 0.7)
+
+treePred <- predict(treeModel, wineTest, type = "class")
+table(treePred, wineTest$quality)
+# Test accuracy
+treeAcc <- mean(treePred == wineTest$quality)
+
+# Use cross-validation to prune the tree
+set.seed(33)
+cvTree <- cv.tree(treeModel, FUN = prune.misclass)
+plot(cvTree$size, cvTree$dev, type = "b")
+pruneTree <- prune.misclass(treeModel, best = 5)
+plot(pruneTree)
+text(pruneTree, pretty = 0)
+prunePred <- predict(pruneTree, wineTest, type = "class")
+
+table(prunePred, wineTest$quality)
+
+# Test accuracy
+cvTreeAcc <- mean(prunePred == wineTest$quality)
+```
+
+
+### Random Forest
+```{r}
+library(randomForest)
+set.seed(5)
+rfModel <- randomForest(quality ~ ., data = wineTrain, importance = TRUE, ntree = 25)
+rfPred <- predict(rfModel, newdata = wineTest)
+wineQuality <- ifelse(wineTest$quality == "High", 1, 0)
+rfQuality <- ifelse(rfPred == "High", 1, 0)
+table(rfQuality, wineQuality)
+
+# Test accuracy
+rfAcc <- mean(rfQuality == wineQuality)
+```
+
+### K-Nearest Neighbors
+```{r}
+library(class)
+xTrain <- wineTrain[, -12]
+yTrain <- wineTrain[, 12, drop = TRUE]
+xTest <- wineTest[, -12]
+yTest <- wineTest[, 12, drop = TRUE]
+error <- as.numeric()
+set.seed(33)
+for(i in 1:10){
+  knnPred <- knn(xTrain, xTest, yTrain, k = i)
+  error[i] <- mean(knnPred != yTest)
+}
+plot(error)
+# Test accuracy
+knnAcc <- mean(knnPred == yTest)
+```
+
+### Support Vector Machine
+```{r}
+set.seed(33)
+library(e1071)
+svmModel <- tune(svm, quality~., data=wineTrain, kernel="radial",
+ranges=list(cost=c(0.1,1,10,100,1000),gamma=c(0.5,1,2,3,4)))
+summary(svmModel)
+svmPred <- predict(svmModel$best.model, newdata = wineTest)
+table(true = wineTest[, "quality"], pred = svmPred)
+
+# Test accuracy
+svmAcc <- mean(svmPred == yTest)
+```
+
+## Results
+```{r}
+# regression
+regressResults <- data.frame(c(olsMSE, interactMSE, quadMSE, cubicMSE, quarMSE, lassoMSE, ridgeMSE, treeMSE, prune9MSE, prune6MSE, gam2MSE,
+                               gam3MSE, gam4MSE, gam5MSE, gamSmooth2MSE, gamSmooth3MSE, gamSmooth4MSE, gamSmooth5MSE, forwardMSE, backwardMSE,
+                               bestSubMSE),
+                             c("Ordinary Least Squares", "Interaction", "Quadratic Polynomial", "Cubic Polynomial", "Quartic Polynomial",
+                               "Lasso", "Ridge", "Regression Tree", "Pruned Regression Tree - 9 Branches", 
+                               "Pruned Regression Tree - 6 Branches", "General Additive Model - 2 Splines", 
+                               "General Additive Model - 3 Splines", "General Additive Model - 4 Splines", 
+                               "General Additive Model - 5 Splines", "General Additive Model - 2 Smoothing Splines", 
+                               "General Additive Model - 3 Smoothing Splines", "General Additive Model - 4 Smoothing Splines", 
+                               "General Additive Model - 5 Smoothing Splines", "Forward Selection", "Backward Selection", 
+                               "Best Subset Selection"))
+
+colnames(regressResults) <- c("MSE", "Model")
+
+regressResults
+```
+
+```{r}
+# classification
+classResults <- data.frame(c(logAcc, ldaAcc, qdaAcc, knnAcc, treeAcc, cvTreeAcc, rfAcc, svmAcc), 
+                           c("Logistic Regression", "Linead Discriminant Analysis", "Quadratic Discriminant Analysis", "K-Nearest Neighbors",
+                             "Decision Trees", "CV-Deicision Trees", "Random Forests", "Support Vector Machine"))
+
+colnames(classResults) <- c("Accuracy", "Model")
+
+classResults
+```
+
